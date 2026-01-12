@@ -1,0 +1,77 @@
+# docker-compose.yml - Production-ready setup with separate MySQL container
+
+version: '3.8'
+
+services:
+  # MySQL Database Service
+  mysql:
+    image: mysql:8.0
+    container_name: secscope-mysql
+    hostname: secscope-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_change_me
+      MYSQL_DATABASE: secscope_store
+      MYSQL_USER: secscope_user
+      MYSQL_PASSWORD: secscope_password_123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_change_me"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # PHP Apache Web Service
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: secscope-web
+    hostname: secscope-web
+    ports:
+      - "80:80"
+    volumes:
+      - ./src:/var/www/html
+      - ./logs/apache:/var/log/apache2
+    environment:
+      DB_HOST: mysql
+      DB_NAME: secscope_store
+      DB_USER: secscope_user
+      DB_PASSWORD: secscope_password_123
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # phpMyAdmin (Optional - for database management)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: secscope-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root_password_change_me
+    ports:
+      - "8081:80"
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
